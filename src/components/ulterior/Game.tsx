@@ -249,7 +249,7 @@ function MotiveCard({ motive, onClose }: { motive: State["motive"]; onClose: () 
         <p className="eyebrow">How you score</p>
         <ul className="mt-3 space-y-1 text-sm">{c.scoring.map((l) => <li key={l}>{l}</li>)}</ul>
       </div>
-      <p className="mt-8 text-xs italic text-muted-foreground">Keep this private. Nobody knows how many secret roles are at the table.</p>
+      <p className="mt-8 text-xs italic text-muted-foreground">Keep this private. There's one Troublemaker at the table.</p>
       <div className="mt-auto pt-10"><button className="btn-primary" onClick={onClose}>Understood</button></div>
     </div>
   );
@@ -289,7 +289,7 @@ function ActScreen({ s, seat, now }: { s: State; seat: Seat; now: number }) {
         <h2 className="display animate-curtain mt-3 text-6xl">{info.title}</h2>
         <div className="rule mt-10" />
         <p className="eyebrow mt-10 animate-rise" style={{ animationDelay: ".4s" }}>
-          Your mission{agenda && agenda.difficulty >= 2 && <span className="text-brass"> · Bold · worth 2</span>}
+          {s.motive === "DISRUPTOR" ? <span className="seal">Your Troublemaker mission</span> : "Your mission"}
         </p>
         <p className="display animate-rise mt-4 text-[2rem] leading-tight" style={{ animationDelay: ".6s" }}>“{agenda?.text}”</p>
         {special && (
@@ -449,8 +449,10 @@ function Submission({ s, seat, refresh }: { s: State; seat: Seat; refresh: () =>
   return (
     <div className="flex flex-1 flex-col pt-14">
       <p className="eyebrow">Suspicion</p>
-      <h2 className="display mt-4 text-4xl">Who do you think has a secret role?</h2>
-      <p className="mt-3 text-sm text-muted-foreground">Pick one. It stays secret until the reveal.</p>
+      <h2 className="display mt-4 text-4xl">Who do you think is the Troublemaker?</h2>
+      <p className="mt-3 text-sm text-muted-foreground">
+        {s.motive === "DISRUPTOR" ? "That's you — pick anyone to keep your cover." : "Pick one. It stays secret until the reveal."}
+      </p>
       <div className="mt-8"><PlayerPick players={s.players} me={s.me.id} value={suspect} onChange={setSuspect} noneLabel="Nobody, yet" /></div>
       <div className="mt-auto pt-10">
         {error && <p className="mb-4 text-sm seal">{error}</p>}
@@ -517,7 +519,9 @@ function Accusation({ s, seat, refresh }: { s: State; seat: Seat; refresh: () =>
       <div className="flex flex-1 flex-col pt-20">
         <h2 className="wordmark animate-curtain text-4xl leading-tight">The Evening<br />Is Over</h2>
         <p className="display animate-rise mt-12 text-3xl italic" style={{ animationDelay: ".8s" }}>One last question.</p>
-        <p className="animate-rise mt-6 text-muted-foreground" style={{ animationDelay: "1.1s" }}>Guess one person who had a secret role. Get it right for +2.</p>
+        <p className="animate-rise mt-6 text-muted-foreground" style={{ animationDelay: "1.1s" }}>
+          {s.motive === "DISRUPTOR" ? "Pick anyone to keep your cover. You get +2 if fewer than half the table guesses you." : "Who was the Troublemaker? Get it right for +2."}
+        </p>
         <div className="mt-auto pt-10"><button className="btn-primary animate-rise" style={{ animationDelay: "1.4s" }} onClick={() => setIntro(false)}>Go on</button></div>
       </div>
     );
@@ -525,7 +529,7 @@ function Accusation({ s, seat, refresh }: { s: State; seat: Seat; refresh: () =>
   return (
     <div className="flex flex-1 flex-col pt-14">
       <p className="eyebrow">Final guess</p>
-      <h2 className="display mt-4 text-4xl">Who do you think had a secret role?</h2>
+      <h2 className="display mt-4 text-4xl">Who was the Troublemaker?</h2>
       <div className="mt-8"><PlayerPick players={s.players} me={s.me.id} value={pick} onChange={setPick} /></div>
       <div className="mt-auto pt-10">
         {error && <p className="mb-4 text-sm seal">{error}</p>}

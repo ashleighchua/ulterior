@@ -26,6 +26,7 @@ export interface VerdictRow {
   involvedIn: number;
   accusationCorrect: boolean;
   decoyPoints: number;
+  escaped: number;
 }
 
 export function computeVerdict(d: RevealData) {
@@ -60,6 +61,14 @@ export function computeVerdict(d: RevealData) {
       decoyPoints = roundsSuspected * SCORING.decoySuspectedRound + finalGuesses * SCORING.decoyFinalGuess;
       score += decoyPoints;
     }
+    let escaped = 0;
+    if (motiveOf.get(p.id) === "DISRUPTOR") {
+      const guesses = d.accusations.filter((a) => a.accusedId === p.id).length;
+      if (guesses < (d.players.length - 1) / 2) {
+        escaped = 1;
+        score += SCORING.troublemakerEscaped;
+      }
+    }
     return {
       playerId: p.id,
       score,
@@ -70,6 +79,7 @@ export function computeVerdict(d: RevealData) {
       involvedIn: d.agendas.filter((a) => a.involvedPlayerId === p.id && a.result === "COMPLETE").length,
       accusationCorrect,
       decoyPoints,
+      escaped,
     };
   });
   rows.sort((a, b) => b.score - a.score);
@@ -83,8 +93,9 @@ export function computeVerdict(d: RevealData) {
   const titles = [
     { title: "Most Convincing", why: "Highest score of the evening", ids: top("score") },
     { title: "Master of the Agenda", why: "Most missions completed", ids: top("completed") },
-    { title: "Human Lie Detector", why: "Most guesses that landed on a secret role", ids: top("correctReads") },
+    { title: "Human Lie Detector", why: "Most guesses that landed on the Troublemaker", ids: top("correctReads") },
     { title: "Best Distraction", why: "Most Troublemaker bonus missions pulled off", ids: top("specialCompleted", (r) => motiveOf.get(r.playerId) === "DISRUPTOR") },
+    { title: "Got Away With It", why: "The Troublemaker who slipped past the table", ids: top("escaped") },
     { title: "Master of Disguise", why: "The Decoy who fooled the most people", ids: top("decoyPoints") },
     { title: "Most Suspicious", why: "Suspected most often by the table", ids: top("suspectedBy") },
     { title: "Chaos Agent", why: "Unwittingly helped with the most missions", ids: top("involvedIn") },

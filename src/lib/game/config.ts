@@ -33,8 +33,9 @@ export type GameLength = "QUICK" | "FULL";
  * A Quick game skips the middle pools so it still escalates.
  */
 export const LENGTHS: Record<GameLength, { label: string; pools: number[]; bonusRounds: number[] }> = {
-  QUICK: { label: "Quick", pools: [1, 3, 5], bonusRounds: [2] },
-  FULL: { label: "Full", pools: [1, 2, 3, 4, 5], bonusRounds: [2, 4] },
+  // Bonus missions are switched off to keep the game simple; e.g. [2] / [2, 4] turns them back on.
+  QUICK: { label: "Quick", pools: [1, 3, 5], bonusRounds: [] },
+  FULL: { label: "Full", pools: [1, 2, 3, 4, 5], bonusRounds: [] },
 };
 
 export function lengthFor(rounds: number): GameLength {
@@ -76,29 +77,32 @@ export function roundInfo(round: number, totalRounds: number) {
   return { title: POOLS[pool]?.title ?? "", line: POOLS[pool]?.line ?? "" };
 }
 
-export function motivesFor(count: number): { observers: number; disruptors: number; decoys: number } {
-  if (count <= 5) return { observers: 1, disruptors: 1, decoys: 0 };
-  if (count <= 8) return { observers: 1, disruptors: 1, decoys: 1 };
-  return { observers: 1, disruptors: 2, decoys: 1 };
+/**
+ * Simple mode: one Troublemaker, everyone else a Guest.
+ * The Detective and Decoy still work end to end — raise their counts here to bring them back.
+ */
+export function motivesFor(_count: number): { observers: number; disruptors: number; decoys: number } {
+  return { observers: 0, disruptors: 1, decoys: 0 };
 }
 
 export const SCORING = {
   agendaComplete: 1,
-  difficultAgendaComplete: 2, // bold missions (the later rounds)
+  difficultAgendaComplete: 1, // bold missions (later rounds); set to 2 to make them worth double
   specialObjectiveComplete: 2, // Detective / Troublemaker / Decoy bonus mission
   observerCorrectSuspicion: 1, // per round the Detective's suspect had a secret role
   correctFinalAccusation: 2,
   decoySuspectedRound: 1, // per round at least one person suspected the Decoy
   decoyFinalGuess: 1, // per person whose final guess was the Decoy
+  troublemakerEscaped: 2, // fewer than half of the other players guessed the Troublemaker
 };
 
 export const MOTIVE_COPY: Record<Motive, { name: string; lines: string[]; objective?: string; scoring: string[] }> = {
   PLAYER: {
     name: "Guest",
-    lines: ["Complete your missions", "without anyone noticing you have one."],
+    lines: ["Do your missions without anyone noticing.", "And work out who the Troublemaker is."],
     scoring: [
-      `+${SCORING.agendaComplete} for each mission (+${SCORING.difficultAgendaComplete} for bold ones)`,
-      `+${SCORING.correctFinalAccusation} if your final guess has a secret role`,
+      `+${SCORING.agendaComplete} for each mission you pull off`,
+      `+${SCORING.correctFinalAccusation} if you guess the Troublemaker at the end`,
     ],
   },
   OBSERVER: {
@@ -114,12 +118,11 @@ export const MOTIVE_COPY: Record<Motive, { name: string; lines: string[]; object
   },
   DISRUPTOR: {
     name: "Troublemaker",
-    lines: ["You have missions too.", "But you're also quietly steering the evening."],
-    objective: "Nudge the flow of dinner. Keep it playful — never at anyone's expense.",
+    lines: ["Everyone else is trying to find you.", "Your missions are about stirring things up."],
+    objective: "Don't get caught. Keep it playful — never at anyone's expense.",
     scoring: [
-      `+${SCORING.agendaComplete} for each mission (+${SCORING.difficultAgendaComplete} for bold ones)`,
-      `+${SCORING.specialObjectiveComplete} for each bonus mission`,
-      `+${SCORING.correctFinalAccusation} if your final guess has a secret role`,
+      `+${SCORING.agendaComplete} for each mission you pull off`,
+      `+${SCORING.troublemakerEscaped} if fewer than half the table guesses you at the end`,
     ],
   },
   DECOY: {

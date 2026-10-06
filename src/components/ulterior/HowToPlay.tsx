@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MOTIVE_COPY, SCORING } from "@/lib/game/config";
+import { SCORING } from "@/lib/game/config";
 
 const PAGES: { eyebrow: string; title: string; body: React.ReactNode }[] = [
   {
@@ -8,68 +8,43 @@ const PAGES: { eyebrow: string; title: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>Each round, your phone gives you a small secret mission, like:</p>
-        <p className="display mt-4 border-l border-claret pl-4 text-2xl">“Get someone to show you a photo on their phone.”</p>
-        <p className="mt-4">Pull it off without anyone noticing. Then put your phone face down and enjoy dinner.</p>
+        <p className="display mt-4 border-l border-claret pl-4 text-2xl">“Get someone to do an impression.”</p>
+        <p className="mt-4">Pull it off without anyone noticing. Then phone face down — just talk and eat.</p>
+        <p className="mt-4 text-muted-foreground">When the timer ends, a 30-second check-in on your phone: did you do it?</p>
       </>
     ),
   },
   {
     eyebrow: "The twist",
-    title: "Some people have a secret role.",
+    title: "One of you is the Troublemaker.",
     body: (
       <>
-        <p>Most people are <span className="display text-xl">{MOTIVE_COPY.PLAYER.name}s</span>. A few get a secret role on top of their missions:</p>
-        <ul className="mt-4 space-y-3">
-          <li><span className="display seal text-xl">{MOTIVE_COPY.OBSERVER.name}</span> — watches the table and tries to spot the other secret roles.</li>
-          <li><span className="display seal text-xl">{MOTIVE_COPY.DISRUPTOR.name}</span> — quietly steers the conversation somewhere else.</li>
-          <li><span className="display text-xl text-brass">{MOTIVE_COPY.DECOY.name}</span> — at tables of 6+. Acts suspicious on purpose, but has no secret role. Guess them and you get nothing.</li>
-        </ul>
-        <p className="mt-4">Nobody knows who's who. Spotting the real secret roles is how you win.</p>
+        <p>Their missions are about stirring things up — changing the subject, starting silly debates, getting everyone to do something.</p>
+        <p className="mt-4">Watch for it. At each check-in you'll say who you suspect. Nobody sees your answers until the end.</p>
+        <p className="mt-4 text-muted-foreground">A big table splitting into a few conversations is fine.</p>
       </>
-    ),
-  },
-  {
-    eyebrow: "Each round",
-    title: "Read. Play. Check in.",
-    body: (
-      <ol className="space-y-4">
-        <li><span className="numerals mr-3 text-muted-foreground">1</span>Read your mission. Phone face down.</li>
-        <li><span className="numerals mr-3 text-muted-foreground">2</span>Talk, eat, and try to pull it off. A big table will split into a few conversations — that's fine.</li>
-        <li><span className="numerals mr-3 text-muted-foreground">3</span>When the timer ends, a 30-second check-in: <em>Did you do it?</em> and <em>Who do you think has a secret role?</em> Answers stay hidden until the end.</li>
-      </ol>
     ),
   },
   {
     eyebrow: "The end",
-    title: "One guess. Then the reveal.",
+    title: "Guess. Then the reveal.",
     body: (
       <>
-        <p>After the last round (3 rounds in a Quick game, 5 in a Full one), everyone makes one final guess: <em>who had a secret role?</em></p>
-        <p className="mt-4">Then gather round one phone for the reveal: everyone's missions, every secret role, the scores and a few awards.</p>
+        <p>After the last round, everyone makes one final guess: <em>who was the Troublemaker?</em> Then gather round one phone for the reveal.</p>
+        <ul className="mt-6 divide-y divide-[var(--hairline)]">
+          {[
+            ["Each mission you pull off", `+${SCORING.agendaComplete}`],
+            ["Guess the Troublemaker", `+${SCORING.correctFinalAccusation}`],
+            ["Troublemaker: fewer than half guess you", `+${SCORING.troublemakerEscaped}`],
+          ].map(([what, pts]) => (
+            <li key={what} className="flex items-baseline justify-between gap-4 py-3">
+              <span>{what}</span>
+              <span className="numerals text-2xl text-brass">{pts}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-sm text-muted-foreground">Honour system — be honest at check-ins. The reveal shows everything.</p>
       </>
-    ),
-  },
-  {
-    eyebrow: "Scoring",
-    title: "How to win.",
-    body: (
-      <ul className="divide-y divide-[var(--hairline)]">
-        {[
-          ["Complete a mission", `+${SCORING.agendaComplete}`],
-          ["Complete a bold mission (final rounds)", `+${SCORING.difficultAgendaComplete}`],
-          ["Final guess has a secret role", `+${SCORING.correctFinalAccusation}`],
-          ["Bonus mission (special roles only)", `+${SCORING.specialObjectiveComplete}`],
-          [`${MOTIVE_COPY.OBSERVER.name}: suspect has a secret role (per round)`, `+${SCORING.observerCorrectSuspicion}`],
-          [`${MOTIVE_COPY.DECOY.name}: each round someone suspects you`, `+${SCORING.decoySuspectedRound}`],
-          [`${MOTIVE_COPY.DECOY.name}: each final guess on you`, `+${SCORING.decoyFinalGuess}`],
-        ].map(([what, pts]) => (
-          <li key={what} className="flex items-baseline justify-between gap-4 py-3">
-            <span>{what}</span>
-            <span className="numerals text-2xl text-brass">{pts}</span>
-          </li>
-        ))}
-        <li className="pt-4 text-sm text-muted-foreground">Missions are on the honour system. Report truthfully — the reveal shows everything.</li>
-      </ul>
     ),
   },
 ];

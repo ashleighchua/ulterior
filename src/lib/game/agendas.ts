@@ -139,6 +139,9 @@ const disruptorSeeds: [string, string, string][] = [
   ["di-03", "Cause two people to disagree about something trivial.", "di-disagree"],
   ["di-04", "Redirect the group's attention without making it obvious.", "di-redirect"],
   ["di-05", "Get the group to collectively change what they are currently doing.", "di-change"],
+  ["di-06", "Start a harmless debate, then switch sides halfway through.", "di-switch"],
+  ["di-07", "Get the table to stop and notice something you point out — a song, a sound, someone's shoes.", "di-notice"],
+  ["di-08", "Ask a “would you rather” so tricky that at least three people answer.", "di-wyr"],
 ];
 
 export const AGENDAS: Agenda[] = seeds.map(([id, act, category, text, tag, requiresPlayer, minPlayers]) => ({

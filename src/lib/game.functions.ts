@@ -176,12 +176,21 @@ export const setTheTable = createServerFn({ method: "POST" })
     await db.from("motives").insert(order.map((id) => ({ player_id: id, table_id: table.id, motive: motiveOf.get(id)! })));
 
     // Agendas: one per player per round, drawn from that round's pool, distinct within a round where possible.
+    // The Troublemaker's round missions come from the Troublemaker deck instead, so watchful players can spot them.
+    const troubleDeck = new Map<string, typeof SPECIAL_AGENDAS>();
+    for (const [id, m] of motiveOf) if (m === "DISRUPTOR") troubleDeck.set(id, shuffle(SPECIAL_AGENDAS.filter((a) => a.motive === "DISRUPTOR")));
     const rows: { table_id: string; player_id: string; act: number; is_special: boolean; agenda_id: string; text: string; difficulty: number; requires_player: boolean }[] = [];
     const usedByPlayer = new Map<string, Set<string>>();
     for (let act = 1; act <= pools.length; act++) {
       const pool = AGENDAS.filter((a) => a.act === pools[act - 1] && ps.length >= a.minPlayers && ps.length <= a.maxPlayers);
       let deck = shuffle(pool);
       for (const id of shuffle(ps.map((p) => p.id))) {
+        const trouble = troubleDeck.get(id);
+        if (trouble) {
+          const pick = trouble[(act - 1) % trouble.length]!;
+          rows.push({ table_id: table.id, player_id: id, act, is_special: false, agenda_id: pick.id, text: pick.text, difficulty: 1, requires_player: false });
+          continue;
+        }
         if (!deck.length) deck = shuffle(pool);
         const used = usedByPlayer.get(id) ?? new Set();
         const idx = deck.findIndex((a) => !used.has(a.tag));
