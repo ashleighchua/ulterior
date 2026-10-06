@@ -1,4 +1,4 @@
-import { SCORING, type Motive } from "./config";
+import { isSecretRole, SCORING, type Motive } from "./config";
 
 export interface RevealAgenda {
   playerId: string;
@@ -25,10 +25,11 @@ export interface VerdictRow {
   suspectedBy: number;
   involvedIn: number;
   accusationCorrect: boolean;
+  decoyPoints: number;
 }
 
 export function computeVerdict(d: RevealData) {
-  const special = new Set(d.players.filter((p) => p.motive !== "PLAYER").map((p) => p.id));
+  const special = new Set(d.players.filter((p) => isSecretRole(p.motive)).map((p) => p.id));
   const motiveOf = new Map(d.players.map((p) => [p.id, p.motive]));
   const rows: VerdictRow[] = d.players.map((p) => {
     let score = 0;
@@ -52,6 +53,13 @@ export function computeVerdict(d: RevealData) {
       score += SCORING.correctFinalAccusation;
       correctReads++;
     }
+    let decoyPoints = 0;
+    if (motiveOf.get(p.id) === "DECOY") {
+      const roundsSuspected = new Set(d.suspicions.filter((s) => s.suspectId === p.id).map((s) => s.act)).size;
+      const finalGuesses = d.accusations.filter((a) => a.accusedId === p.id).length;
+      decoyPoints = roundsSuspected * SCORING.decoySuspectedRound + finalGuesses * SCORING.decoyFinalGuess;
+      score += decoyPoints;
+    }
     return {
       playerId: p.id,
       score,
@@ -61,6 +69,7 @@ export function computeVerdict(d: RevealData) {
       suspectedBy: d.suspicions.filter((s) => s.suspectId === p.id).length,
       involvedIn: d.agendas.filter((a) => a.involvedPlayerId === p.id && a.result === "COMPLETE").length,
       accusationCorrect,
+      decoyPoints,
     };
   });
   rows.sort((a, b) => b.score - a.score);
@@ -76,6 +85,7 @@ export function computeVerdict(d: RevealData) {
     { title: "Master of the Agenda", why: "Most missions completed", ids: top("completed") },
     { title: "Human Lie Detector", why: "Most guesses that landed on a secret role", ids: top("correctReads") },
     { title: "Best Distraction", why: "Most Troublemaker bonus missions pulled off", ids: top("specialCompleted", (r) => motiveOf.get(r.playerId) === "DISRUPTOR") },
+    { title: "Master of Disguise", why: "The Decoy who fooled the most people", ids: top("decoyPoints") },
     { title: "Most Suspicious", why: "Suspected most often by the table", ids: top("suspectedBy") },
     { title: "Chaos Agent", why: "Unwittingly helped with the most missions", ids: top("involvedIn") },
   ].filter((t) => t.ids);

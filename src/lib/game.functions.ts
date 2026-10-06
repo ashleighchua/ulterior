@@ -168,10 +168,11 @@ export const setTheTable = createServerFn({ method: "POST" })
     if (!claimed?.length) return { ok: true, data: null };
 
     // Motives
-    const { observers, disruptors } = motivesFor(ps.length);
+    const { observers, disruptors, decoys } = motivesFor(ps.length);
+    const roles: Motive[] = [...Array(observers).fill("OBSERVER"), ...Array(disruptors).fill("DISRUPTOR"), ...Array(decoys).fill("DECOY")];
     const order = shuffle(ps.map((p) => p.id));
     const motiveOf = new Map<string, Motive>();
-    order.forEach((id, i) => motiveOf.set(id, i < observers ? "OBSERVER" : i < observers + disruptors ? "DISRUPTOR" : "PLAYER"));
+    order.forEach((id, i) => motiveOf.set(id, roles[i] ?? "PLAYER"));
     await db.from("motives").insert(order.map((id) => ({ player_id: id, table_id: table.id, motive: motiveOf.get(id)! })));
 
     // Agendas: one per player per round, drawn from that round's pool, distinct within a round where possible.

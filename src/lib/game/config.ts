@@ -1,9 +1,15 @@
 // Central game configuration: rounds, roles, timing and scoring.
 // Note: the database and server still use the original internal names
-// (Act, Motive, Agenda, OBSERVER/DISRUPTOR). Players only ever see the words below:
-// Round, Role, Mission, Detective, Troublemaker.
+// (Act, Motive, Agenda, OBSERVER/DISRUPTOR/DECOY). Players only ever see the words below:
+// Round, Role, Mission, Detective, Troublemaker, Decoy.
 
-export type Motive = "PLAYER" | "OBSERVER" | "DISRUPTOR";
+export type Motive = "PLAYER" | "OBSERVER" | "DISRUPTOR" | "DECOY";
+
+/**
+ * The roles the table is trying to find. The Decoy is deliberately NOT one of them:
+ * they only pretend to be, so guessing them scores nothing (and scores for the Decoy).
+ */
+export const isSecretRole = (m: Motive | undefined) => m === "OBSERVER" || m === "DISRUPTOR";
 
 export type GameStatus =
   | "LOBBY"
@@ -70,18 +76,20 @@ export function roundInfo(round: number, totalRounds: number) {
   return { title: POOLS[pool]?.title ?? "", line: POOLS[pool]?.line ?? "" };
 }
 
-export function motivesFor(count: number): { observers: number; disruptors: number } {
-  if (count <= 5) return { observers: 1, disruptors: 0 };
-  if (count <= 8) return { observers: 1, disruptors: 1 };
-  return { observers: 1, disruptors: 2 };
+export function motivesFor(count: number): { observers: number; disruptors: number; decoys: number } {
+  if (count <= 5) return { observers: 1, disruptors: 1, decoys: 0 };
+  if (count <= 8) return { observers: 1, disruptors: 1, decoys: 1 };
+  return { observers: 1, disruptors: 2, decoys: 1 };
 }
 
 export const SCORING = {
   agendaComplete: 1,
   difficultAgendaComplete: 2, // bold missions (the later rounds)
-  specialObjectiveComplete: 2, // Detective / Troublemaker bonus mission
+  specialObjectiveComplete: 2, // Detective / Troublemaker / Decoy bonus mission
   observerCorrectSuspicion: 1, // per round the Detective's suspect had a secret role
   correctFinalAccusation: 2,
+  decoySuspectedRound: 1, // per round at least one person suspected the Decoy
+  decoyFinalGuess: 1, // per person whose final guess was the Decoy
 };
 
 export const MOTIVE_COPY: Record<Motive, { name: string; lines: string[]; objective?: string; scoring: string[] }> = {
@@ -111,6 +119,18 @@ export const MOTIVE_COPY: Record<Motive, { name: string; lines: string[]; object
     scoring: [
       `+${SCORING.agendaComplete} for each mission (+${SCORING.difficultAgendaComplete} for bold ones)`,
       `+${SCORING.specialObjectiveComplete} for each bonus mission`,
+      `+${SCORING.correctFinalAccusation} if your final guess has a secret role`,
+    ],
+  },
+  DECOY: {
+    name: "Decoy",
+    lines: ["You have missions too.", "But you want everyone to suspect you."],
+    objective: "Act just suspicious enough that people think you have a secret role. You don't — and anyone who guesses you gets nothing.",
+    scoring: [
+      `+${SCORING.agendaComplete} for each mission (+${SCORING.difficultAgendaComplete} for bold ones)`,
+      `+${SCORING.specialObjectiveComplete} for each bonus mission`,
+      `+${SCORING.decoySuspectedRound} each round someone suspects you`,
+      `+${SCORING.decoyFinalGuess} for every final guess on you`,
       `+${SCORING.correctFinalAccusation} if your final guess has a secret role`,
     ],
   },

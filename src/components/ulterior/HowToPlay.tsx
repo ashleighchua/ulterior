@@ -21,9 +21,10 @@ const PAGES: { eyebrow: string; title: string; body: React.ReactNode }[] = [
         <p>Most people are <span className="display text-xl">{MOTIVE_COPY.PLAYER.name}s</span>. A few get a secret role on top of their missions:</p>
         <ul className="mt-4 space-y-3">
           <li><span className="display seal text-xl">{MOTIVE_COPY.OBSERVER.name}</span> — watches the table and tries to spot the other secret roles.</li>
-          <li><span className="display seal text-xl">{MOTIVE_COPY.DISRUPTOR.name}</span> — quietly steers the conversation. Only at tables of 6 or more.</li>
+          <li><span className="display seal text-xl">{MOTIVE_COPY.DISRUPTOR.name}</span> — quietly steers the conversation somewhere else.</li>
+          <li><span className="display text-xl text-brass">{MOTIVE_COPY.DECOY.name}</span> — at tables of 6+. Acts suspicious on purpose, but has no secret role. Guess them and you get nothing.</li>
         </ul>
-        <p className="mt-4">Nobody knows who has a secret role. That's what you're guessing.</p>
+        <p className="mt-4">Nobody knows who's who. Spotting the real secret roles is how you win.</p>
       </>
     ),
   },
@@ -57,8 +58,10 @@ const PAGES: { eyebrow: string; title: string; body: React.ReactNode }[] = [
           ["Complete a mission", `+${SCORING.agendaComplete}`],
           ["Complete a bold mission (final rounds)", `+${SCORING.difficultAgendaComplete}`],
           ["Final guess has a secret role", `+${SCORING.correctFinalAccusation}`],
-          [`Bonus mission (${MOTIVE_COPY.OBSERVER.name} or ${MOTIVE_COPY.DISRUPTOR.name})`, `+${SCORING.specialObjectiveComplete}`],
+          ["Bonus mission (special roles only)", `+${SCORING.specialObjectiveComplete}`],
           [`${MOTIVE_COPY.OBSERVER.name}: suspect has a secret role (per round)`, `+${SCORING.observerCorrectSuspicion}`],
+          [`${MOTIVE_COPY.DECOY.name}: each round someone suspects you`, `+${SCORING.decoySuspectedRound}`],
+          [`${MOTIVE_COPY.DECOY.name}: each final guess on you`, `+${SCORING.decoyFinalGuess}`],
         ].map(([what, pts]) => (
           <li key={what} className="flex items-baseline justify-between gap-4 py-3">
             <span>{what}</span>

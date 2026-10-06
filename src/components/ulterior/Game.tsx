@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { supabase } from "@/integrations/supabase/client";
 import { creatorAction, getState, setTheTable, submitAccusation, submitAct } from "@/lib/game.functions";
-import { estimateMinutes, LENGTHS, MAX_PLAYERS, MIN_PLAYERS, MOTIVE_COPY, roundInfo, roundMinutes, type GameLength } from "@/lib/game/config";
+import { estimateMinutes, isSecretRole, LENGTHS, MAX_PLAYERS, MIN_PLAYERS, MOTIVE_COPY, roundInfo, roundMinutes, type GameLength } from "@/lib/game/config";
 import { clearSeat, localFlag, type Seat } from "@/lib/session";
 import { Avatar, Shell } from "./Shell";
 import { Reveal } from "./Reveal";
@@ -235,7 +235,7 @@ function MotiveCard({ motive, onClose }: { motive: State["motive"]; onClose: () 
   return (
     <div className="flex flex-1 flex-col pt-14">
       <p className="eyebrow animate-rise">Your role</p>
-      <h2 className={`display animate-curtain mt-8 text-6xl ${motive !== "PLAYER" ? "seal" : ""}`}>{c.name}</h2>
+      <h2 className={`display animate-curtain mt-8 text-6xl ${isSecretRole(motive) ? "seal" : motive === "DECOY" ? "text-brass" : ""}`}>{c.name}</h2>
       <div className="animate-rise mt-10 space-y-1 text-lg" style={{ animationDelay: ".5s" }}>
         {c.lines.map((l) => <p key={l}>{l}</p>)}
       </div>
