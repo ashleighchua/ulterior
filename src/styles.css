@@ -1,0 +1,137 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-claret: var(--claret);
+  --color-brass: var(--brass);
+  --color-hairline: var(--hairline);
+}
+
+/* ULTERIOR: candlelit ink, bone paper, a single claret accent. */
+:root {
+  --radius: 0.25rem;
+  --background: oklch(0.145 0.008 50);
+  --foreground: oklch(0.93 0.018 85);
+  --card: oklch(0.18 0.009 50);
+  --card-foreground: oklch(0.93 0.018 85);
+  --popover: oklch(0.18 0.009 50);
+  --popover-foreground: oklch(0.93 0.018 85);
+  --primary: oklch(0.93 0.018 85);
+  --primary-foreground: oklch(0.16 0.008 50);
+  --secondary: oklch(0.22 0.01 50);
+  --secondary-foreground: oklch(0.93 0.018 85);
+  --muted: oklch(0.22 0.01 50);
+  --muted-foreground: oklch(0.66 0.02 75);
+  --accent: oklch(0.24 0.012 50);
+  --accent-foreground: oklch(0.93 0.018 85);
+  --destructive: oklch(0.58 0.17 25);
+  --destructive-foreground: oklch(0.96 0.01 85);
+  --claret: oklch(0.58 0.16 22);
+  --brass: oklch(0.78 0.08 80);
+  --hairline: oklch(0.93 0.018 85 / 12%);
+  --border: oklch(0.93 0.018 85 / 14%);
+  --input: oklch(0.93 0.018 85 / 18%);
+  --ring: oklch(0.78 0.08 80 / 60%);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html { color-scheme: dark; }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    background-image: radial-gradient(120% 60% at 50% -10%, oklch(0.22 0.03 40 / 0.55), transparent 60%);
+    background-attachment: fixed;
+    min-height: 100dvh;
+  }
+  ::selection { background: var(--claret); color: var(--foreground); }
+}
+
+@layer components {
+  .display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.01em; line-height: 0.95; }
+  .eyebrow { font-family: var(--font-sans); font-size: 0.68rem; letter-spacing: 0.32em; text-transform: uppercase; color: var(--color-muted-foreground); }
+  .wordmark { font-family: var(--font-display); letter-spacing: 0.28em; text-transform: uppercase; }
+  .numerals { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+  .rule { height: 1px; background: var(--color-hairline); }
+
+  .btn-primary {
+    display: inline-flex; align-items: center; justify-content: center; width: 100%;
+    padding: 1.05rem 1.25rem; border-radius: var(--radius);
+    background: var(--color-foreground); color: var(--color-primary-foreground);
+    font-size: 0.78rem; font-weight: 600; letter-spacing: 0.28em; text-transform: uppercase;
+    transition: transform .2s ease, opacity .2s ease, background .2s ease;
+  }
+  .btn-primary:hover { background: var(--color-brass); }
+  .btn-primary:active { transform: scale(0.985); }
+  .btn-primary:disabled { opacity: .3; pointer-events: none; }
+
+  .btn-ghost {
+    display: inline-flex; align-items: center; justify-content: center; width: 100%;
+    padding: 1.05rem 1.25rem; border-radius: var(--radius);
+    border: 1px solid var(--color-border); color: var(--color-foreground);
+    font-size: 0.78rem; font-weight: 600; letter-spacing: 0.28em; text-transform: uppercase;
+    transition: border-color .2s ease, background .2s ease;
+  }
+  .btn-ghost:hover { border-color: var(--color-brass); }
+  .btn-ghost:disabled { opacity: .3; pointer-events: none; }
+
+  .link-quiet { font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--color-muted-foreground); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--color-hairline); }
+  .link-quiet:hover { color: var(--color-foreground); }
+
+  .field {
+    width: 100%; background: transparent; border: 0; border-bottom: 1px solid var(--color-input);
+    padding: 0.75rem 0; font-size: 1.5rem; font-family: var(--font-display); color: var(--color-foreground); outline: none;
+  }
+  .field:focus { border-color: var(--color-brass); }
+  .field::placeholder { color: oklch(0.93 0.018 85 / 25%); }
+
+  .card-quiet { border: 1px solid var(--color-hairline); background: oklch(0.18 0.009 50 / 0.6); border-radius: var(--radius-lg); }
+
+  .choice {
+    display: flex; align-items: center; gap: .75rem; width: 100%; text-align: left;
+    padding: .9rem 1rem; border: 1px solid var(--color-hairline); border-radius: var(--radius);
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .choice[data-on="true"] { border-color: var(--color-brass); background: oklch(0.78 0.08 80 / 0.08); }
+
+  .seal { color: var(--color-claret); }
+}
+
+@keyframes rise { from { opacity: 0; transform: translateY(14px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes curtain { from { opacity: 0; letter-spacing: 0.25em; } to { opacity: 1; } }
+@keyframes breathe { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+@utility animate-rise { animation: rise .9s cubic-bezier(.2,.7,.1,1) both; }
+@utility animate-curtain { animation: curtain 1.6s cubic-bezier(.2,.7,.1,1) both; }
+@utility animate-breathe { animation: breathe 3.2s ease-in-out infinite; }
