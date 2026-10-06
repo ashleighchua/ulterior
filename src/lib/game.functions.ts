@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { MAX_PLAYERS, MIN_PLAYERS, TIMING, TOTAL_ACTS, SPECIAL_OBJECTIVE_ACTS, motivesFor, type Motive, type GameStatus } from "./game/config";
+import { LENGTHS, MAX_PLAYERS, MAX_ROUNDS, MIN_PLAYERS, TIMING, motivesFor, roundMinutes, type Motive, type GameStatus } from "./game/config";
 import { AGENDAS, SPECIAL_AGENDAS } from "./game/agendas";
 import { computeVerdict, type RevealData } from "./game/scoring";
 
@@ -67,6 +67,12 @@ async function verify(db: Admin, s: z.infer<typeof sessionSchema>) {
   return { table, player };
 }
 
+/** Rounds in this game = the highest round anyone was dealt a mission for. */
+async function totalRounds(db: Admin, tableId: string) {
+  const { data } = await db.from("agenda_assignments").select("act").eq("table_id", tableId).order("act", { ascending: false }).limit(1).maybeSingle();
+  return data?.act ?? MAX_ROUNDS;
+}
+
 /** Idempotent state machine driven lazily by any client. */
 async function advance(db: Admin, tableId: string) {
   for (let i = 0; i < 6; i++) {
@@ -82,7 +88,7 @@ async function advance(db: Admin, tableId: string) {
       if ((ps ?? []).every((p) => p.submitted_act >= t.current_act))
         patch = { status: "ACT_TRANSITION", transition_ends_at: iso(now + TIMING.transitionSec * 1000) };
     } else if (status === "ACT_TRANSITION" && t.transition_ends_at && now >= Date.parse(t.transition_ends_at)) {
-      if (t.current_act >= TOTAL_ACTS) patch = { status: "FINAL_ACCUSATION" };
+      if (t.current_act >= (await totalRounds(db, tableId))) patch = { status: "FINAL_ACCUSATION" };
       else {
         const intro = now + TIMING.introSec * 1000;
         patch = { status: "ACT_INTRO", current_act: t.current_act + 1, intro_ends_at: iso(intro), act_ends_at: iso(intro + t.act_duration_sec * 1000) };
@@ -104,7 +110,7 @@ export const createTable = createServerFn({ method: "POST" })
     const db = await admin();
     for (let i = 0; i < 8; i++) {
       const code = newCode();
-      const { data: table, error } = await db.from("game_tables").insert({ code, act_duration_sec: TIMING.actDurationSec }).select("id").single();
+      const { data: table, error } = await db.from("game_tables").insert({ code, act_duration_sec: roundMinutes(MIN_PLAYERS) * 60 }).select("id").single();
       if (error || !table) continue;
       const seat = await seatPlayer(db, table.id, data.name, data.emoji);
       if (!seat.ok) return seat;
@@ -138,7 +144,7 @@ export const peekTable = createServerFn({ method: "GET" })
   });
 
 export const setTheTable = createServerFn({ method: "POST" })
-  .inputValidator((d) => sessionSchema.parse(d))
+  .inputValidator((d) => sessionSchema.extend({ length: z.enum(["QUICK", "FULL"]).default("QUICK") }).parse(d))
   .handler(async ({ data }): Promise<Result<null>> => {
     const db = await admin();
     const v = await verify(db, data);
@@ -153,9 +159,11 @@ export const setTheTable = createServerFn({ method: "POST" })
     // Claim the start atomically.
     const now = Date.now();
     const intro = now + TIMING.introSec * 1000;
+    const roundSec = roundMinutes(ps.length) * 60;
+    const { pools, bonusRounds } = LENGTHS[data.length];
     const { data: claimed } = await db
       .from("game_tables")
-      .update({ status: "ACT_INTRO", current_act: 1, intro_ends_at: iso(intro), act_ends_at: iso(intro + table.act_duration_sec * 1000), updated_at: iso(now) })
+      .update({ status: "ACT_INTRO", current_act: 1, act_duration_sec: roundSec, intro_ends_at: iso(intro), act_ends_at: iso(intro + roundSec * 1000), updated_at: iso(now) })
       .eq("id", table.id).eq("status", "LOBBY").select("id");
     if (!claimed?.length) return { ok: true, data: null };
 
@@ -166,11 +174,11 @@ export const setTheTable = createServerFn({ method: "POST" })
     order.forEach((id, i) => motiveOf.set(id, i < observers ? "OBSERVER" : i < observers + disruptors ? "DISRUPTOR" : "PLAYER"));
     await db.from("motives").insert(order.map((id) => ({ player_id: id, table_id: table.id, motive: motiveOf.get(id)! })));
 
-    // Agendas: one per player per Act, distinct within an Act where possible.
+    // Agendas: one per player per round, drawn from that round's pool, distinct within a round where possible.
     const rows: { table_id: string; player_id: string; act: number; is_special: boolean; agenda_id: string; text: string; difficulty: number; requires_player: boolean }[] = [];
     const usedByPlayer = new Map<string, Set<string>>();
-    for (let act = 1; act <= TOTAL_ACTS; act++) {
-      const pool = AGENDAS.filter((a) => a.act === act && ps.length >= a.minPlayers && ps.length <= a.maxPlayers);
+    for (let act = 1; act <= pools.length; act++) {
+      const pool = AGENDAS.filter((a) => a.act === pools[act - 1] && ps.length >= a.minPlayers && ps.length <= a.maxPlayers);
       let deck = shuffle(pool);
       for (const id of shuffle(ps.map((p) => p.id))) {
         if (!deck.length) deck = shuffle(pool);
@@ -185,7 +193,7 @@ export const setTheTable = createServerFn({ method: "POST" })
     for (const [id, m] of motiveOf) {
       if (m === "PLAYER") continue;
       const deck = shuffle(SPECIAL_AGENDAS.filter((a) => a.motive === m));
-      SPECIAL_OBJECTIVE_ACTS.forEach((act, i) => {
+      bonusRounds.forEach((act, i) => {
         const pick = deck[i % deck.length]!;
         rows.push({ table_id: table.id, player_id: id, act, is_special: true, agenda_id: pick.id, text: pick.text, difficulty: 2, requires_player: false });
       });
@@ -208,21 +216,22 @@ export const getState = createServerFn({ method: "POST" })
     const me = players!.find((p) => p.id === v0.player.id)!;
     const t = table!;
     let motive: Motive | null = null;
-    let agendas: { act: number; isSpecial: boolean; text: string; requiresPlayer: boolean; result: string | null }[] = [];
+    let agendas: { act: number; isSpecial: boolean; text: string; difficulty: number; requiresPlayer: boolean; result: string | null }[] = [];
     let suspectedThisAct = false;
     if (t.status !== "LOBBY") {
       const { data: m } = await db.from("motives").select("motive").eq("player_id", me.id).maybeSingle();
       motive = (m?.motive as Motive) ?? null;
-      const { data: a } = await db.from("agenda_assignments").select("act, is_special, text, requires_player, result").eq("player_id", me.id).lte("act", t.current_act).order("act");
-      agendas = (a ?? []).map((x) => ({ act: x.act, isSpecial: x.is_special, text: x.text, requiresPlayer: x.requires_player, result: x.result }));
+      const { data: a } = await db.from("agenda_assignments").select("act, is_special, text, difficulty, requires_player, result").eq("player_id", me.id).lte("act", t.current_act).order("act");
+      agendas = (a ?? []).map((x) => ({ act: x.act, isSpecial: x.is_special, text: x.text, difficulty: x.difficulty, requiresPlayer: x.requires_player, result: x.result }));
       const { data: s } = await db.from("suspicions").select("id").eq("player_id", me.id).eq("act", t.current_act).maybeSingle();
       suspectedThisAct = !!s;
     }
+    const rounds = t.status === "LOBBY" ? 0 : await totalRounds(db, t.id);
     return {
       ok: true as const,
       serverNow: Date.now(),
       table: {
-        code: t.code, status: t.status as GameStatus, currentAct: t.current_act,
+        code: t.code, status: t.status as GameStatus, currentAct: t.current_act, totalRounds: rounds,
         introEndsAt: t.intro_ends_at, actEndsAt: t.act_ends_at, transitionEndsAt: t.transition_ends_at,
         isCreator: t.creator_player_id === me.id,
       },
@@ -235,7 +244,7 @@ export const getState = createServerFn({ method: "POST" })
 export const submitAct = createServerFn({ method: "POST" })
   .inputValidator((d) =>
     sessionSchema.extend({
-      act: z.number().int().min(1).max(TOTAL_ACTS),
+      act: z.number().int().min(1).max(MAX_ROUNDS),
       result: z.enum(["COMPLETE", "FAILED"]),
       involvedId: z.string().uuid().nullable(),
       specialResult: z.enum(["COMPLETE", "FAILED"]).nullable(),
@@ -283,9 +292,9 @@ export const submitAccusation = createServerFn({ method: "POST" })
     return { ok: true, data: null };
   });
 
-/** Creator-only: nudge the evening along (stalled submissions, end early). */
+/** Creator-only: nudge the evening along (more time, end a round, stalled check-ins, end early). */
 export const creatorAction = createServerFn({ method: "POST" })
-  .inputValidator((d) => sessionSchema.extend({ action: z.enum(["MOVE_ON", "END_EARLY", "REVEAL_NOW"]) }).parse(d))
+  .inputValidator((d) => sessionSchema.extend({ action: z.enum(["ADD_TIME", "END_ROUND", "MOVE_ON", "END_EARLY", "REVEAL_NOW"]) }).parse(d))
   .handler(async ({ data }): Promise<Result<null>> => {
     const db = await admin();
     const v = await verify(db, data);
@@ -294,6 +303,9 @@ export const creatorAction = createServerFn({ method: "POST" })
     if (t.creator_player_id !== v.player.id) return fail("Only the person who started the table can do that.");
     const now = Date.now();
     let patch: Record<string, unknown> | null = null;
+    if (data.action === "ADD_TIME" && ["ACT_INTRO", "ACT_ACTIVE"].includes(t.status) && t.act_ends_at)
+      patch = { act_ends_at: iso(Math.max(Date.parse(t.act_ends_at), now) + TIMING.extendSec * 1000) };
+    if (data.action === "END_ROUND" && t.status === "ACT_ACTIVE") patch = { status: "ACT_SUBMISSION" };
     if (data.action === "MOVE_ON" && t.status === "ACT_SUBMISSION") patch = { status: "ACT_TRANSITION", transition_ends_at: iso(now + TIMING.transitionSec * 1000) };
     if (data.action === "END_EARLY" && ["ACT_INTRO", "ACT_ACTIVE", "ACT_SUBMISSION", "ACT_TRANSITION"].includes(t.status)) patch = { status: "FINAL_ACCUSATION" };
     if (data.action === "REVEAL_NOW" && t.status === "FINAL_ACCUSATION") patch = { status: "REVEAL" };

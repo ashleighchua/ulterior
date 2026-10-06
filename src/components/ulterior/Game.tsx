@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { supabase } from "@/integrations/supabase/client";
 import { creatorAction, getState, setTheTable, submitAccusation, submitAct } from "@/lib/game.functions";
-import { actInfo, MAX_PLAYERS, MIN_PLAYERS, MOTIVE_COPY, TOTAL_ACTS } from "@/lib/game/config";
+import { estimateMinutes, LENGTHS, MAX_PLAYERS, MIN_PLAYERS, MOTIVE_COPY, roundInfo, roundMinutes, type GameLength } from "@/lib/game/config";
 import { clearSeat, localFlag, type Seat } from "@/lib/session";
 import { Avatar, Shell } from "./Shell";
 import { Reveal } from "./Reveal";
+import { HowToPlay } from "./HowToPlay";
 
 type State = Extract<Awaited<ReturnType<typeof getState>>, { ok: true }>;
 type Player = State["players"][number];
@@ -76,7 +77,7 @@ export function Game({ seat, onLost }: { seat: Seat; onLost: () => void }) {
 function Screens({ s, seat, now, refresh }: { s: State; seat: Seat; now: number; refresh: () => void }) {
   const { table } = s;
   const top = table.status !== "LOBBY" && table.currentAct > 0 && !["REVEAL", "FINISHED"].includes(table.status)
-    ? <span className="eyebrow">Act {actInfo(table.currentAct).numeral}</span>
+    ? <span className="eyebrow">Round {table.currentAct} of {table.totalRounds}</span>
     : <span className="font-mono text-xs tracking-[0.3em] text-muted-foreground">{table.code}</span>;
 
   let body: React.ReactNode;
@@ -94,6 +95,8 @@ function Screens({ s, seat, now, refresh }: { s: State; seat: Seat; now: number;
 
 // ---------------- The Table (lobby) ----------------
 
+const RULES_SEEN = "ulterior:rulesSeen";
+
 function Lobby({ s, seat, refresh }: { s: State; seat: Seat; refresh: () => void }) {
   const start = useServerFn(setTheTable);
   const [qr, setQr] = useState<string | null>(null);
@@ -102,6 +105,17 @@ function Lobby({ s, seat, refresh }: { s: State; seat: Seat; refresh: () => void
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState("");
+  const [length, setLength] = useState<GameLength>("QUICK");
+  const [rules, setRules] = useState(false);
+  const [newHere, setNewHere] = useState(false);
+  useEffect(() => {
+    try { setNewHere(!localStorage.getItem(RULES_SEEN)); } catch { /* storage unavailable */ }
+  }, []);
+  const closeRules = () => {
+    try { localStorage.setItem(RULES_SEEN, "1"); } catch { /* storage unavailable */ }
+    setNewHere(false);
+    setRules(false);
+  };
   useEffect(() => {
     const url = `${window.location.origin}/t/${s.table.code}`;
     setLink(url);
@@ -112,10 +126,15 @@ function Lobby({ s, seat, refresh }: { s: State; seat: Seat; refresh: () => void
   async function go() {
     setBusy(true);
     setError(null);
-    const r = await start({ data: seat });
-    setBusy(false);
-    if (!r.ok) setError(r.error);
-    refresh();
+    try {
+      const r = await start({ data: { ...seat, length } });
+      if (!r.ok) setError(r.error);
+    } catch {
+      setError("Couldn't reach the table. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+      refresh();
+    }
   }
   async function share() {
     if (navigator.share) {
@@ -126,9 +145,22 @@ function Lobby({ s, seat, refresh }: { s: State; seat: Seat; refresh: () => void
     setTimeout(() => setCopied(false), 1800);
   }
 
+  if (rules) return <HowToPlay onDone={closeRules} doneLabel="Back to the table" />;
+
+  const count = Math.max(s.players.length, MIN_PLAYERS);
   return (
     <div className="flex flex-1 flex-col pt-10">
-      <p className="eyebrow">The Table</p>
+      <div className="flex items-baseline justify-between">
+        <p className="eyebrow">The Table</p>
+        <button onClick={() => setRules(true)} className="link-quiet">How to play</button>
+      </div>
+      {newHere && (
+        <button onClick={() => setRules(true)} className="animate-rise card-quiet mt-6 w-full p-5 text-left">
+          <p className="eyebrow seal">New here?</p>
+          <p className="display mt-2 text-2xl">Learn the game in one minute.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Read it while everyone sits down →</p>
+        </button>
+      )}
       <div className="mt-6 flex items-end justify-between">
         <div>
           <p className="eyebrow !text-[0.6rem]">Table Code</p>
@@ -172,6 +204,18 @@ function Lobby({ s, seat, refresh }: { s: State; seat: Seat; refresh: () => void
         {error && <p className="mb-4 text-center text-sm seal">{error}</p>}
         {s.table.isCreator ? (
           <>
+            <p className="eyebrow mb-3">How long?</p>
+            <div className="mb-3 grid grid-cols-2 gap-2">
+              {(Object.keys(LENGTHS) as GameLength[]).map((l) => (
+                <button key={l} type="button" data-on={length === l} onClick={() => setLength(l)} className="choice flex-col !items-start gap-1">
+                  <span className="display text-xl">{LENGTHS[l].label}</span>
+                  <span className="text-xs text-muted-foreground">{LENGTHS[l].pools.length} rounds · ~{estimateMinutes(count, l)} min</span>
+                </button>
+              ))}
+            </div>
+            <p className="mb-6 text-center text-xs text-muted-foreground">
+              Rounds are {roundMinutes(count)} min with {count} people — bigger tables get longer rounds. You can add time during a round.
+            </p>
             <button className="btn-primary" disabled={!ready || busy} onClick={go}>{busy ? "Setting…" : "Set the Table"}</button>
             <p className="mt-4 text-center text-xs italic text-muted-foreground">You're playing too. The table can look after itself.</p>
           </>
@@ -190,18 +234,22 @@ function MotiveCard({ motive, onClose }: { motive: State["motive"]; onClose: () 
   const c = MOTIVE_COPY[motive];
   return (
     <div className="flex flex-1 flex-col pt-14">
-      <p className="eyebrow animate-rise">Your Motive</p>
+      <p className="eyebrow animate-rise">Your role</p>
       <h2 className={`display animate-curtain mt-8 text-6xl ${motive !== "PLAYER" ? "seal" : ""}`}>{c.name}</h2>
       <div className="animate-rise mt-10 space-y-1 text-lg" style={{ animationDelay: ".5s" }}>
         {c.lines.map((l) => <p key={l}>{l}</p>)}
       </div>
       {c.objective && (
         <div className="animate-rise card-quiet mt-8 p-5" style={{ animationDelay: ".8s" }}>
-          <p className="eyebrow">Your additional objective</p>
+          <p className="eyebrow">Your extra job</p>
           <p className="display mt-3 text-2xl">{c.objective}</p>
         </div>
       )}
-      <p className="mt-8 text-xs italic text-muted-foreground">Keep this private. Nobody knows how many Ulterior Motives are at the table.</p>
+      <div className="animate-rise mt-8" style={{ animationDelay: "1s" }}>
+        <p className="eyebrow">How you score</p>
+        <ul className="mt-3 space-y-1 text-sm">{c.scoring.map((l) => <li key={l}>{l}</li>)}</ul>
+      </div>
+      <p className="mt-8 text-xs italic text-muted-foreground">Keep this private. Nobody knows how many secret roles are at the table.</p>
       <div className="mt-auto pt-10"><button className="btn-primary" onClick={onClose}>Understood</button></div>
     </div>
   );
@@ -229,7 +277,7 @@ function ActScreen({ s, seat, now }: { s: State; seat: Seat; now: number }) {
   const remaining = s.table.actEndsAt ? Date.parse(s.table.actEndsAt) - now : 0;
   const duration = s.table.actEndsAt && s.table.introEndsAt ? Date.parse(s.table.actEndsAt) - Date.parse(s.table.introEndsAt) : 0;
   const shown = Math.min(remaining, duration);
-  const info = actInfo(act);
+  const info = roundInfo(act, s.table.totalRounds);
 
   if (!seenMotive) return <MotiveCard motive={s.motive} onClose={() => { motiveSeen.set("1"); setSeenMotive(true); }} />;
   if (peek === "motive") return <MotiveCard motive={s.motive} onClose={() => setPeek("none")} />;
@@ -237,23 +285,25 @@ function ActScreen({ s, seat, now }: { s: State; seat: Seat; now: number }) {
   if (!hasBegun || peek === "agenda") {
     return (
       <div className="flex flex-1 flex-col pt-12">
-        <p className="eyebrow animate-rise">Act {info.numeral}</p>
+        <p className="eyebrow animate-rise">Round {act} of {s.table.totalRounds}</p>
         <h2 className="display animate-curtain mt-3 text-6xl">{info.title}</h2>
         <div className="rule mt-10" />
-        <p className="eyebrow mt-10 animate-rise" style={{ animationDelay: ".4s" }}>Your Agenda</p>
+        <p className="eyebrow mt-10 animate-rise" style={{ animationDelay: ".4s" }}>
+          Your mission{agenda && agenda.difficulty >= 2 && <span className="text-brass"> · Bold · worth 2</span>}
+        </p>
         <p className="display animate-rise mt-4 text-[2rem] leading-tight" style={{ animationDelay: ".6s" }}>“{agenda?.text}”</p>
         {special && (
           <div className="animate-rise card-quiet mt-8 p-5" style={{ animationDelay: ".9s" }}>
-            <p className="eyebrow seal">Ulterior objective</p>
+            <p className="eyebrow seal">Bonus mission · worth 2</p>
             <p className="display mt-3 text-xl">{special.text}</p>
           </div>
         )}
         <p className="numerals mt-10 text-center text-5xl text-muted-foreground">{fmt(shown)}</p>
         <div className="mt-auto pt-8">
           <button className="btn-primary" onClick={() => { begun.set("1"); setHasBegun(true); setPeek("none"); }}>
-            {peek === "agenda" ? "Hide it again" : "Begin the Act"}
+            {peek === "agenda" ? "Hide it again" : "Start the round"}
           </button>
-          <p className="mt-4 text-center text-xs text-muted-foreground">Then put your phone face down.</p>
+          <p className="mt-4 text-center text-xs text-muted-foreground">Then put your phone face down. When the timer ends, you'll do a quick check-in.</p>
         </div>
       </div>
     );
@@ -263,27 +313,41 @@ function ActScreen({ s, seat, now }: { s: State; seat: Seat; now: number }) {
     <div className="flex flex-1 flex-col items-center justify-center text-center">
       <p className="eyebrow">Time Remaining</p>
       <p className="numerals mt-4 text-[6.5rem] leading-none">{fmt(shown)}</p>
-      <p className="display mt-6 text-2xl italic text-muted-foreground">{early ? "The table is still in session." : info.line}</p>
+      <p className="display mt-6 text-2xl italic text-muted-foreground">{early ? "Keep chatting — you'll check in when the timer ends." : info.line}</p>
       <p className="eyebrow animate-breathe mt-10">Put your phone down</p>
       <div className="mt-16 flex flex-col items-center gap-4">
         {!early && <button className="link-quiet" onClick={() => setEarly(true)}>I'm done early</button>}
-        <button className="link-quiet" onClick={() => setPeek("agenda")}>View my Agenda</button>
-        <button className="link-quiet" onClick={() => setPeek("motive")}>View my Motive</button>
-        <CreatorEnd s={s} seat={seat} />
+        <button className="link-quiet" onClick={() => setPeek("agenda")}>View my mission</button>
+        <button className="link-quiet" onClick={() => setPeek("motive")}>View my role</button>
+        <HostControls s={s} seat={seat} />
       </div>
     </div>
   );
 }
 
-function CreatorEnd({ s, seat }: { s: State; seat: Seat }) {
+function HostControls({ s, seat }: { s: State; seat: Seat }) {
   const act = useServerFn(creatorAction);
-  const [confirm, setConfirm] = useState(false);
+  const [confirm, setConfirm] = useState<"none" | "round" | "evening">("none");
   if (!s.table.isCreator) return null;
-  if (!confirm) return <button className="link-quiet !text-[0.6rem] opacity-60" onClick={() => setConfirm(true)}>End the evening early</button>;
+  const run = (action: "ADD_TIME" | "END_ROUND" | "END_EARLY") => {
+    setConfirm("none");
+    act({ data: { ...seat, action } }).catch(() => undefined);
+  };
+  if (confirm !== "none")
+    return (
+      <div className="flex gap-4">
+        <button className="link-quiet seal" onClick={() => run(confirm === "round" ? "END_ROUND" : "END_EARLY")}>
+          {confirm === "round" ? "Yes, check in now" : "Yes, end it"}
+        </button>
+        <button className="link-quiet" onClick={() => setConfirm("none")}>Keep playing</button>
+      </div>
+    );
   return (
-    <div className="flex gap-4">
-      <button className="link-quiet seal" onClick={() => act({ data: { ...seat, action: "END_EARLY" } })}>Yes, end it</button>
-      <button className="link-quiet" onClick={() => setConfirm(false)}>Keep playing</button>
+    <div className="mt-4 flex flex-col items-center gap-4 border-t border-hairline pt-6">
+      <p className="eyebrow !text-[0.6rem]">Host</p>
+      <button className="link-quiet" onClick={() => run("ADD_TIME")}>+5 minutes</button>
+      {s.table.status === "ACT_ACTIVE" && <button className="link-quiet" onClick={() => setConfirm("round")}>End this round now</button>}
+      <button className="link-quiet !text-[0.6rem] opacity-60" onClick={() => setConfirm("evening")}>End the evening early</button>
     </div>
   );
 }
@@ -332,21 +396,28 @@ function Submission({ s, seat, refresh }: { s: State; seat: Seat; refresh: () =>
     if (!result) return;
     setBusy(true);
     setError(null);
-    const r = await submit({ data: { ...seat, act, result, involvedId: involved, specialResult: special ? specialResult ?? "FAILED" : null, suspectId: suspect } });
-    setBusy(false);
-    if (!r.ok && r.error !== "Already recorded.") setError(r.error);
-    refresh();
+    try {
+      const r = await submit({ data: { ...seat, act, result, involvedId: involved, specialResult: special ? specialResult ?? "FAILED" : null, suspectId: suspect } });
+      if (!r.ok && r.error !== "Already recorded.") setError(r.error);
+    } catch {
+      setError("Couldn't reach the table. Try again.");
+    } finally {
+      setBusy(false);
+      refresh();
+    }
   }
 
   if (step === "result")
     return (
       <div className="flex flex-1 flex-col pt-14">
-        <p className="display animate-curtain text-center text-8xl">Time</p>
-        <p className="display mt-6 text-center text-2xl italic text-muted-foreground">Did you pull it off?</p>
+        <p className="eyebrow text-center">Quick check-in</p>
+        <p className="display animate-curtain mt-4 text-center text-7xl">Time's up</p>
+        <p className="display mt-6 text-center text-2xl italic text-muted-foreground">Did you pull off your mission?</p>
         <p className="mt-10 border-l border-claret pl-4 text-sm text-muted-foreground">“{agenda?.text}”</p>
+        <p className="mt-4 text-xs text-muted-foreground">Be honest — it all comes out in the reveal.</p>
         <div className="mt-auto flex flex-col gap-3 pt-10">
-          <button className="btn-primary" onClick={() => afterResult("COMPLETE")}>Agenda Complete</button>
-          <button className="btn-ghost" onClick={() => afterResult("FAILED")}>Agenda Failed</button>
+          <button className="btn-primary" onClick={() => afterResult("COMPLETE")}>I did it</button>
+          <button className="btn-ghost" onClick={() => afterResult("FAILED")}>Didn't manage</button>
         </div>
       </div>
     );
@@ -355,8 +426,8 @@ function Submission({ s, seat, refresh }: { s: State; seat: Seat; refresh: () =>
     return (
       <div className="flex flex-1 flex-col pt-14">
         <p className="eyebrow">Privately</p>
-        <h2 className="display mt-4 text-4xl">Was anyone directly involved?</h2>
-        <p className="mt-3 text-sm text-muted-foreground">Nobody sees this until The Reveal.</p>
+        <h2 className="display mt-4 text-4xl">Who did you pull it off with?</h2>
+        <p className="mt-3 text-sm text-muted-foreground">Nobody sees this until the reveal.</p>
         <div className="mt-8"><PlayerPick players={s.players} me={s.me.id} value={involved} onChange={setInvolved} noneLabel="Rather not say" /></div>
         <div className="mt-auto pt-10"><button className="btn-primary" onClick={() => setStep(special ? "special" : "suspect")}>Continue</button></div>
       </div>
@@ -365,9 +436,9 @@ function Submission({ s, seat, refresh }: { s: State; seat: Seat; refresh: () =>
   if (step === "special")
     return (
       <div className="flex flex-1 flex-col pt-14">
-        <p className="eyebrow seal">Ulterior objective</p>
+        <p className="eyebrow seal">Bonus mission</p>
         <p className="display mt-4 text-3xl">“{special?.text}”</p>
-        <p className="display mt-6 text-xl italic text-muted-foreground">And this?</p>
+        <p className="display mt-6 text-xl italic text-muted-foreground">Did you pull this off too?</p>
         <div className="mt-auto flex flex-col gap-3 pt-10">
           <button className="btn-primary" onClick={() => { setSpecialResult("COMPLETE"); setStep("suspect"); }}>Pulled it off</button>
           <button className="btn-ghost" onClick={() => { setSpecialResult("FAILED"); setStep("suspect"); }}>Not this time</button>
@@ -378,8 +449,8 @@ function Submission({ s, seat, refresh }: { s: State; seat: Seat; refresh: () =>
   return (
     <div className="flex flex-1 flex-col pt-14">
       <p className="eyebrow">Suspicion</p>
-      <h2 className="display mt-4 text-5xl">Who has an agenda?</h2>
-      <p className="mt-3 text-sm text-muted-foreground">Choose one. It stays secret until The Reveal.</p>
+      <h2 className="display mt-4 text-4xl">Who do you think has a secret role?</h2>
+      <p className="mt-3 text-sm text-muted-foreground">Pick one. It stays secret until the reveal.</p>
       <div className="mt-8"><PlayerPick players={s.players} me={s.me.id} value={suspect} onChange={setSuspect} noneLabel="Nobody, yet" /></div>
       <div className="mt-auto pt-10">
         {error && <p className="mb-4 text-sm seal">{error}</p>}
@@ -392,13 +463,13 @@ function Submission({ s, seat, refresh }: { s: State; seat: Seat; refresh: () =>
 function Interlude({ s, seat, waiting }: { s: State; seat: Seat; waiting?: boolean }) {
   const action = useServerFn(creatorAction);
   const done = s.players.filter((p) => p.submitted_act >= s.table.currentAct).length;
-  const last = s.table.currentAct >= TOTAL_ACTS;
+  const last = s.table.currentAct >= s.table.totalRounds;
   return (
     <div className="flex flex-1 flex-col items-center justify-center text-center">
-      <p className="eyebrow">Act {actInfo(s.table.currentAct).numeral}</p>
-      <h2 className="display animate-curtain mt-4 text-6xl">Act complete.</h2>
-      <p className="display mt-4 text-2xl italic text-muted-foreground">{last ? "The evening draws to a close." : "Next Act begins shortly."}</p>
-      {waiting && <p className="eyebrow animate-breathe mt-12">{done} of {s.players.length} have reported</p>}
+      <p className="eyebrow">Round {s.table.currentAct} of {s.table.totalRounds}</p>
+      <h2 className="display animate-curtain mt-4 text-6xl">Round over.</h2>
+      <p className="display mt-4 text-2xl italic text-muted-foreground">{last ? "That was the last round. One final guess to go." : "The next round starts shortly."}</p>
+      {waiting && <p className="eyebrow animate-breathe mt-12">{done} of {s.players.length} have checked in</p>}
       {waiting && s.table.isCreator && s.table.status === "ACT_SUBMISSION" && (
         <button className="link-quiet mt-10" onClick={() => action({ data: { ...seat, action: "MOVE_ON" } })}>Move on without them</button>
       )}
@@ -414,14 +485,29 @@ function Accusation({ s, seat, refresh }: { s: State; seat: Seat; refresh: () =>
   const [intro, setIntro] = useState(true);
   const [pick, setPick] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const done = s.players.filter((p) => p.accused).length;
+
+  async function send() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await accuse({ data: { ...seat, accusedId: pick } });
+      if (!r.ok && r.error !== "Already recorded.") setError(r.error);
+    } catch {
+      setError("Couldn't reach the table. Try again.");
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  }
 
   if (s.me.accused)
     return (
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <h2 className="display text-5xl">Sealed.</h2>
-        <p className="display mt-4 text-2xl italic text-muted-foreground">The Reveal begins when everyone has chosen.</p>
-        <p className="eyebrow animate-breathe mt-12">{done} of {s.players.length} accusations in</p>
+        <p className="display mt-4 text-2xl italic text-muted-foreground">The reveal starts when everyone has guessed.</p>
+        <p className="eyebrow animate-breathe mt-12">{done} of {s.players.length} guesses in</p>
         {s.table.isCreator && <button className="link-quiet mt-10" onClick={() => action({ data: { ...seat, action: "REVEAL_NOW" } })}>Reveal now</button>}
       </div>
     );
@@ -431,18 +517,20 @@ function Accusation({ s, seat, refresh }: { s: State; seat: Seat; refresh: () =>
       <div className="flex flex-1 flex-col pt-20">
         <h2 className="wordmark animate-curtain text-4xl leading-tight">The Evening<br />Is Over</h2>
         <p className="display animate-rise mt-12 text-3xl italic" style={{ animationDelay: ".8s" }}>One last question.</p>
+        <p className="animate-rise mt-6 text-muted-foreground" style={{ animationDelay: "1.1s" }}>Guess one person who had a secret role. Get it right for +2.</p>
         <div className="mt-auto pt-10"><button className="btn-primary animate-rise" style={{ animationDelay: "1.4s" }} onClick={() => setIntro(false)}>Go on</button></div>
       </div>
     );
 
   return (
     <div className="flex flex-1 flex-col pt-14">
-      <p className="eyebrow">Final Accusations</p>
-      <h2 className="display mt-4 text-4xl">Who do you think had an Ulterior Motive?</h2>
+      <p className="eyebrow">Final guess</p>
+      <h2 className="display mt-4 text-4xl">Who do you think had a secret role?</h2>
       <div className="mt-8"><PlayerPick players={s.players} me={s.me.id} value={pick} onChange={setPick} /></div>
       <div className="mt-auto pt-10">
-        <button className="btn-primary" disabled={!pick || busy} onClick={async () => { setBusy(true); await accuse({ data: { ...seat, accusedId: pick } }); setBusy(false); refresh(); }}>
-          Accuse
+        {error && <p className="mb-4 text-sm seal">{error}</p>}
+        <button className="btn-primary" disabled={!pick || busy} onClick={send}>
+          {busy ? "Sealing…" : "Lock it in"}
         </button>
       </div>
     </div>

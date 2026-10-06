@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HowToPlayRouteImport } from './routes/how-to-play'
 import { Route as JoinRouteImport } from './routes/join'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as TCodeRouteImport } from './routes/t.$code'
@@ -17,6 +18,11 @@ import { Route as TCodeRouteImport } from './routes/t.$code'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HowToPlayRoute = HowToPlayRouteImport.update({
+  id: '/how-to-play',
+  path: '/how-to-play',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JoinRoute = JoinRouteImport.update({
@@ -37,12 +43,14 @@ const TCodeRoute = TCodeRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/how-to-play': typeof HowToPlayRoute
   '/join': typeof JoinRoute
   '/new': typeof NewRoute
   '/t/$code': typeof TCodeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/how-to-play': typeof HowToPlayRoute
   '/join': typeof JoinRoute
   '/new': typeof NewRoute
   '/t/$code': typeof TCodeRoute
@@ -50,20 +58,22 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/how-to-play': typeof HowToPlayRoute
   '/join': typeof JoinRoute
   '/new': typeof NewRoute
   '/t/$code': typeof TCodeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/join' | '/new' | '/t/$code'
+  fullPaths: '/' | '/how-to-play' | '/join' | '/new' | '/t/$code'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/join' | '/new' | '/t/$code'
-  id: '__root__' | '/' | '/join' | '/new' | '/t/$code'
+  to: '/' | '/how-to-play' | '/join' | '/new' | '/t/$code'
+  id: '__root__' | '/' | '/how-to-play' | '/join' | '/new' | '/t/$code'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  HowToPlayRoute: typeof HowToPlayRoute
   JoinRoute: typeof JoinRoute
   NewRoute: typeof NewRoute
   TCodeRoute: typeof TCodeRoute
@@ -76,6 +86,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/how-to-play': {
+      id: '/how-to-play'
+      path: '/how-to-play'
+      fullPath: '/how-to-play'
+      preLoaderRoute: typeof HowToPlayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/join': {
@@ -104,6 +121,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  HowToPlayRoute: HowToPlayRoute,
   JoinRoute: JoinRoute,
   NewRoute: NewRoute,
   TCodeRoute: TCodeRoute,

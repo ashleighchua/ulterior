@@ -73,11 +73,11 @@ export function computeVerdict(d: RevealData) {
   };
   const titles = [
     { title: "Most Convincing", why: "Highest score of the evening", ids: top("score") },
-    { title: "Master of the Agenda", why: "Most Agendas completed", ids: top("completed") },
-    { title: "Human Lie Detector", why: "Most suspicions landed on an Ulterior Motive", ids: top("correctReads") },
-    { title: "Best Distraction", why: "Most disruption objectives pulled off", ids: top("specialCompleted", (r) => motiveOf.get(r.playerId) === "DISRUPTOR") },
+    { title: "Master of the Agenda", why: "Most missions completed", ids: top("completed") },
+    { title: "Human Lie Detector", why: "Most guesses that landed on a secret role", ids: top("correctReads") },
+    { title: "Best Distraction", why: "Most Troublemaker bonus missions pulled off", ids: top("specialCompleted", (r) => motiveOf.get(r.playerId) === "DISRUPTOR") },
     { title: "Most Suspicious", why: "Suspected most often by the table", ids: top("suspectedBy") },
-    { title: "Chaos Agent", why: "Unwittingly involved in the most Agendas", ids: top("involvedIn") },
+    { title: "Chaos Agent", why: "Unwittingly helped with the most missions", ids: top("involvedIn") },
   ].filter((t) => t.ids);
   return { rows, titles: titles as { title: string; why: string; ids: string[] }[] };
 }

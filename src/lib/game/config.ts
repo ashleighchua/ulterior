@@ -1,4 +1,7 @@
-// Central game configuration: Acts, Motive balancing, timing and scoring.
+// Central game configuration: rounds, roles, timing and scoring.
+// Note: the database and server still use the original internal names
+// (Act, Motive, Agenda, OBSERVER/DISRUPTOR). Players only ever see the words below:
+// Round, Role, Mission, Detective, Troublemaker.
 
 export type Motive = "PLAYER" | "OBSERVER" | "DISRUPTOR";
 
@@ -14,25 +17,58 @@ export type GameStatus =
 
 export const MIN_PLAYERS = 4;
 export const MAX_PLAYERS = 12;
-export const TOTAL_ACTS = 5;
+/** Upper bound on rounds in any game length (used for validation). */
+export const MAX_ROUNDS = 5;
+
+export type GameLength = "QUICK" | "FULL";
+
+/**
+ * Each round draws its missions from one of the five mission pools (1 = gentlest, 5 = boldest).
+ * A Quick game skips the middle pools so it still escalates.
+ */
+export const LENGTHS: Record<GameLength, { label: string; pools: number[]; bonusRounds: number[] }> = {
+  QUICK: { label: "Quick", pools: [1, 3, 5], bonusRounds: [2] },
+  FULL: { label: "Full", pools: [1, 2, 3, 4, 5], bonusRounds: [2, 4] },
+};
+
+export function lengthFor(rounds: number): GameLength {
+  return rounds <= LENGTHS.QUICK.pools.length ? "QUICK" : "FULL";
+}
 
 export const TIMING = {
-  actDurationSec: 15 * 60,
   introSec: 45,
   transitionSec: 8,
   lobbyExpiryHours: 12,
+  /** How much the host's "+5 min" button adds. */
+  extendSec: 5 * 60,
 };
 
-export const ACTS: Record<number, { numeral: string; title: string; line: string }> = {
-  1: { numeral: "I", title: "The Opening", line: "Easy does it. Nobody suspects a thing." },
-  2: { numeral: "II", title: "The Conversation", line: "Steer the talk. Gently." },
-  3: { numeral: "III", title: "The Tell", line: "Watch closely. Someone is up to something." },
-  4: { numeral: "IV", title: "The Turn", line: "Bolder now. The table is warm." },
-  5: { numeral: "V", title: "The Endgame", line: "One last chance to pull it off." },
+/**
+ * Bigger tables need longer rounds so everyone gets airtime:
+ * 4 players → 10 min, 8 → 14 min, 12 → 18 min.
+ */
+export function roundMinutes(players: number) {
+  return Math.min(18, Math.max(10, 6 + players));
+}
+
+/** Rough whole-evening estimate for the lobby: rounds + check-ins + the ending. */
+export function estimateMinutes(players: number, length: GameLength) {
+  const rounds = LENGTHS[length].pools.length;
+  return rounds * (roundMinutes(players) + 2) + 10;
+}
+
+const POOLS: Record<number, { title: string; line: string }> = {
+  1: { title: "The Opening", line: "Easy does it. Nobody suspects a thing." },
+  2: { title: "The Conversation", line: "Steer the talk. Gently." },
+  3: { title: "The Tell", line: "Watch closely. Someone is up to something." },
+  4: { title: "The Turn", line: "Bolder now. The table is warm." },
+  5: { title: "The Endgame", line: "One last chance to pull it off." },
 };
 
-/** Acts in which Observers and Disruptors receive their additional objective. */
-export const SPECIAL_OBJECTIVE_ACTS = [2, 4];
+export function roundInfo(round: number, totalRounds: number) {
+  const pool = LENGTHS[lengthFor(totalRounds)].pools[round - 1] ?? round;
+  return { title: POOLS[pool]?.title ?? "", line: POOLS[pool]?.line ?? "" };
+}
 
 export function motivesFor(count: number): { observers: number; disruptors: number } {
   if (count <= 5) return { observers: 1, disruptors: 0 };
@@ -40,32 +76,42 @@ export function motivesFor(count: number): { observers: number; disruptors: numb
   return { observers: 1, disruptors: 2 };
 }
 
-export const MOTIVE_COPY: Record<Motive, { name: string; lines: string[]; objective?: string }> = {
-  PLAYER: {
-    name: "Player",
-    lines: ["You are simply trying to complete your Agendas", "without making it obvious that you have one."],
-  },
-  OBSERVER: {
-    name: "Observer",
-    lines: ["You have your own Agendas.", "But you're also watching the table."],
-    objective: "Identify the people who seem to be pursuing hidden Agendas.",
-  },
-  DISRUPTOR: {
-    name: "Disruptor",
-    lines: ["You have your own Agendas.", "But you're also quietly steering the evening."],
-    objective:
-      "Subtly alter the flow of dinner. Keep it harmless and playful — never at anyone's expense.",
-  },
-};
-
 export const SCORING = {
   agendaComplete: 1,
-  difficultAgendaComplete: 2, // difficulty >= 2 (Acts IV & V)
-  specialObjectiveComplete: 2, // Observer / Disruptor additional objective
-  observerCorrectSuspicion: 1, // per Act suspicion that landed on an Ulterior Motive
+  difficultAgendaComplete: 2, // bold missions (the later rounds)
+  specialObjectiveComplete: 2, // Detective / Troublemaker bonus mission
+  observerCorrectSuspicion: 1, // per round the Detective's suspect had a secret role
   correctFinalAccusation: 2,
 };
 
-export function actInfo(n: number) {
-  return ACTS[n] ?? { numeral: String(n), title: "", line: "" };
-}
+export const MOTIVE_COPY: Record<Motive, { name: string; lines: string[]; objective?: string; scoring: string[] }> = {
+  PLAYER: {
+    name: "Guest",
+    lines: ["Complete your missions", "without anyone noticing you have one."],
+    scoring: [
+      `+${SCORING.agendaComplete} for each mission (+${SCORING.difficultAgendaComplete} for bold ones)`,
+      `+${SCORING.correctFinalAccusation} if your final guess has a secret role`,
+    ],
+  },
+  OBSERVER: {
+    name: "Detective",
+    lines: ["You have missions too.", "But you're also watching the table."],
+    objective: "Each round, work out who's playing a secret role.",
+    scoring: [
+      `+${SCORING.agendaComplete} for each mission (+${SCORING.difficultAgendaComplete} for bold ones)`,
+      `+${SCORING.specialObjectiveComplete} for each bonus mission`,
+      `+${SCORING.observerCorrectSuspicion} each round your suspect has a secret role`,
+      `+${SCORING.correctFinalAccusation} if your final guess has a secret role`,
+    ],
+  },
+  DISRUPTOR: {
+    name: "Troublemaker",
+    lines: ["You have missions too.", "But you're also quietly steering the evening."],
+    objective: "Nudge the flow of dinner. Keep it playful — never at anyone's expense.",
+    scoring: [
+      `+${SCORING.agendaComplete} for each mission (+${SCORING.difficultAgendaComplete} for bold ones)`,
+      `+${SCORING.specialObjectiveComplete} for each bonus mission`,
+      `+${SCORING.correctFinalAccusation} if your final guess has a secret role`,
+    ],
+  },
+};

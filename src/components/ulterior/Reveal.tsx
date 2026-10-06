@@ -3,11 +3,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { getReveal } from "@/lib/game.functions";
-import { ACTS, MOTIVE_COPY } from "@/lib/game/config";
+import { MOTIVE_COPY } from "@/lib/game/config";
 import type { Seat } from "@/lib/session";
 import { Avatar } from "./Shell";
 
-const STAGES = ["The Motives", "The Agendas", "The Suspicions", "Final Accusations", "The Verdict"] as const;
+const STAGES = ["The Roles", "The Missions", "The Suspicions", "Final Guesses", "The Scores"] as const;
 
 export function Reveal({ seat }: { seat: Seat }) {
   const fetchReveal = useServerFn(getReveal);
@@ -58,8 +58,8 @@ export function Reveal({ seat }: { seat: Seat }) {
                 <ul className="mt-3 space-y-2">
                   {reveal.agendas.filter((a) => a.playerId === p.id).map((a, j) => (
                     <li key={j} className="flex gap-3 text-sm">
-                      <span className="numerals w-6 shrink-0 text-muted-foreground">{ACTS[a.act]?.numeral}</span>
-                      <span className="flex-1">{a.isSpecial && <span className="seal">Ulterior · </span>}{a.text}</span>
+                      <span className="numerals w-6 shrink-0 text-muted-foreground">R{a.act}</span>
+                      <span className="flex-1">{a.isSpecial && <span className="seal">Bonus · </span>}{a.text}</span>
                       <span className={`shrink-0 text-[0.65rem] tracking-[0.2em] ${a.result === "COMPLETE" ? "text-brass" : "text-muted-foreground"}`}>
                         {a.result === "COMPLETE" ? "✓ COMPLETE" : a.result === "FAILED" ? "× FAILED" : "— UNREPORTED"}
                       </span>
@@ -83,7 +83,7 @@ export function Reveal({ seat }: { seat: Seat }) {
                     {mine.length === 0 && <span className="text-sm text-muted-foreground">suspected nobody</span>}
                     {mine.map((s) => (
                       <span key={s.act} className="rounded-sm border border-hairline px-2 py-1 text-xs">
-                        <span className="numerals mr-1 text-muted-foreground">{ACTS[s.act]?.numeral}</span>
+                        <span className="numerals mr-1 text-muted-foreground">R{s.act}</span>
                         <span className={s.suspectId && P.get(s.suspectId)?.motive !== "PLAYER" ? "seal" : ""}>{name(s.suspectId)}</span>
                       </span>
                     ))}
@@ -101,7 +101,7 @@ export function Reveal({ seat }: { seat: Seat }) {
               const correct = !!(a?.accusedId && P.get(a.accusedId)?.motive !== "PLAYER");
               return (
                 <li key={p.id} className="animate-rise flex items-center justify-between border-b border-hairline py-4" style={{ animationDelay: `${300 + i * 400}ms` }}>
-                  <span className="text-sm">{p.name} <span className="text-muted-foreground">accused</span> <span className="display text-xl">{a ? name(a.accusedId) : "—"}</span></span>
+                  <span className="text-sm">{p.name} <span className="text-muted-foreground">guessed</span> <span className="display text-xl">{a ? name(a.accusedId) : "—"}</span></span>
                   <span className={`text-[0.65rem] tracking-[0.2em] ${correct ? "text-brass" : "text-muted-foreground"}`}>{a ? (correct ? "✓ CORRECT" : "× WRONG") : ""}</span>
                 </li>
               );
